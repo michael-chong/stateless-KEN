@@ -1,0 +1,188 @@
+---
+title: "Shona reconstruction"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here) 
+library(readxl)
+
+source(here("code/functions.R"))
+
+model_stuff <- read_rds(here("output/intermediate/shona_disaggregated_model.rds"))
+
+fert_summary <- extract_from_summary(
+  model_stuff$table,
+  "fert", 
+  mappings = model_stuff$mappings
+)
+
+surv_summary <- extract_from_summary(
+  model_stuff$table,
+  "surv", 
+  mappings = model_stuff$mappings
+)
+
+pop_native_true_summary <- extract_from_summary(
+  model_stuff$table,
+  "pop_native_true",
+  mappings = model_stuff$mappings
+)
+
+total_pop_summary <- extract_from_summary(
+  model_stuff$table,
+  "total_pop",
+  mappings = model_stuff$mappings["year"]
+)
+
+mig_pop_summary <- extract_from_summary(
+  model_stuff$table,
+  "pop_mig_true",
+  mappings = list(
+    mig_year = model_stuff$mappings$year,
+    year = model_stuff$mappings$year,
+    age = model_stuff$mappings$age
+  )
+)
+
+native_pop_summary <- extract_from_summary(
+  model_stuff$table,
+  "pop_native_true",
+  mappings = model_stuff$mappings
+)
+
+mig_inits <- extract_from_summary(
+  model_stuff$table,
+  "^pop_mig_init_total",
+  mappings = model_stuff$mappings["year"]
+)
+
+
+all_fert <- read_excel(here("data/wpp/WPP2019_FERT_F07_AGE_SPECIFIC_FERTILITY.xlsx"), skip = 16) %>%
+  rename(region = `Region, subregion, country or area *`, period = Period) %>% 
+  select(-Index, -Variant, -Notes, -`Country code`, -`Parent code`, -`Type`) %>% 
+  mutate(year = as.numeric(str_extract(period, ".+?(?=-)"))) %>% # match everything before hyphen or plus
+  pivot_longer(names_to = "age", values_to = "fert", cols = -c("region", "period", "year")) %>% 
+  mutate(age = as.numeric(str_extract(age, ".+?(?=-)")), fert = as.numeric(fert)/1000) %>%
+  select(-period)
+
+all_surv <- read_excel(here("data/wpp/WPP2019_MORT_F17_3_ABRIDGED_LIFE_TABLE_FEMALE.xlsx"), skip = 16) %>%
+  transmute(
+    region = `Region, subregion, country or area *`,
+    age = `Age (x)`,
+    period = Period,
+    Lx = as.numeric(`Number of person-years lived L(x,n)`)
+  ) %>%
+  group_by(region, period) %>%
+  mutate(surv = Lx / lag(Lx)) %>%
+  mutate(year = as.numeric(str_extract(period, ".+?(?=-)")))  %>%
+  # adjustments to age groups
+  mutate(age = ifelse(age == 1, 0, age)) %>%
+  group_by(age) %>%
+  group_by(region, year, age) %>%
+  summarise(Lx = sum(Lx)) %>%
+  mutate(surv = lead(Lx) / Lx) %>%
+  ungroup()
+
+kenya_surv <- all_surv %>%
+  filter(region == "Kenya") %>%
+  filter(!is.na(surv))
+
+kenya_fert <- all_fert %>%
+  filter(region == "Kenya") %>%
+  right_join(select(kenya_surv, -surv, -Lx)) %>%
+  arrange(region, year, age) %>%
+  mutate(fert = ifelse(is.na(fert), 0, fert))
+```
+
+## Survival
+
+```{r}
+surv_summary %>% 
+  ggplot(aes(x = as.numeric(age), y = q50)) +
+    geom_line(group = 1) +
+    geom_ribbon(aes(ymin = q5, ymax = q95), group = 1, alpha = 0.3) +
+    labs(x = "Age", y = "Rate of survival to next age group") +
+    facet_wrap(~year) +
+    geom_line(data = kenya_surv, aes(x = age, y = surv), colour = "red", alpha = 0.5)
+
+ggsave(here("output/shona/shona_survival.pdf"))
+```
+
+## Fertility
+
+
+```{r}
+fert_summary %>% 
+  ggplot(aes(x = as.numeric(age), y = q50)) +
+    geom_line(group = 1) +
+    geom_ribbon(aes(ymin = q5, ymax = q95), group = 1, alpha = 0.3) +
+    labs(x = "Age", y = "Age-specific fertility") +
+    facet_wrap(~year) +
+    geom_line(data = kenya_fert, aes(x = as.numeric(age), y = fert), colour = "red", alpha = 0.5)
+
+ggsave(here("output/shona/shona_fertility.pdf"))
+```
+
+
+## Population counts
+
+```{r}
+
+ggplot(mig_inits, aes(x = year, y = q50)) +
+  geom_line(group = 1) +
+  geom_ribbon(aes(ymin = q5, ymax = q95), group = 1, alpha = 0.3) +
+  labs(y = "Number of new migrants") 
+
+ggsave(here("output/shona/shona_migration.pdf"))
+```
+
+
+```{r}
+mig_pop_summary %>%
+  filter(as.numeric(year) >= as.numeric(mig_year)) %>%
+  filter(as.numeric(mig_year) < 1985) %>%
+  mutate(
+    age = as.numeric(age),
+    mig_year = str_c("Mig. year: ", mig_year),
+    year = str_c("t = ", year)
+  ) %>% 
+  ggplot(aes(x = age, y = q50)) +
+    geom_line(group = 1) +
+    geom_ribbon(aes(ymin = q5, ymax = q95), alpha = 0.3) +
+    facet_grid(rows = vars(mig_year), cols = vars(year)) +
+    labs(y = "Population count", x = "Age group")
+
+ggsave(here("output/shona/shona_migration_detailed.pdf"))
+```
+
+```{r}
+total_pop <- extract_from_summary(
+  model_stuff$table,
+  "total_pop",
+  mappings = model_stuff$mappings["year"]
+) %>% mutate(population = "all")
+
+total_native_pop <- extract_from_summary(
+  model_stuff$table,
+  "total_native_pop",
+  mappings = model_stuff$mappings["year"]
+) %>%
+  mutate(population = "native-born")
+
+total_mig_pop <- extract_from_summary(
+  model_stuff$table,
+  "total_mig_pop",
+  mappings = model_stuff$mappings["year"]
+) %>% mutate(population = "migrant")
+
+bind_rows(total_pop, total_native_pop, total_mig_pop) %>%
+  ggplot(aes(x = year, y = q50, group = population)) +
+    geom_line(aes(colour = population)) +
+    geom_ribbon(aes(ymin = q5, ymax = q95, fill = population), colour = NA, alpha = 0.3) 
+
+ggsave(here("output/shona/shona_pop_totals.pdf"))
+```
