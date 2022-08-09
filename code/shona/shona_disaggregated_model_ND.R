@@ -9,9 +9,9 @@ load(here("data/shona2019_toronto.rdata"))
 
 wpp_pop_file <- here("data/wpp/WPP2019_POP_F07_3_POPULATION_BY_AGE_FEMALE.xlsx")
 all_pop <- bind_rows(
-    read_excel(wpp_pop_file, skip = 16, sheet = 1),
-    read_excel(wpp_pop_file, skip = 16, sheet = 2)
-  ) %>%
+  read_excel(wpp_pop_file, skip = 16, sheet = 1),
+  read_excel(wpp_pop_file, skip = 16, sheet = 2)
+) %>%
   rename(
     region = `Region, subregion, country or area *`,
     period = `Reference date (as of 1 July)`
@@ -24,9 +24,9 @@ all_pop <- bind_rows(
 # prepare fertility and mortality rates from WPP
 wpp_fert_file <- here("data/wpp/WPP2019_FERT_F07_AGE_SPECIFIC_FERTILITY.xlsx")
 all_fert <- bind_rows(
-    read_excel(wpp_fert_file, skip = 16, sheet = 1),
-    read_excel(wpp_fert_file, skip = 16, sheet = 2)
-  ) %>%
+  read_excel(wpp_fert_file, skip = 16, sheet = 1),
+  read_excel(wpp_fert_file, skip = 16, sheet = 2)
+) %>%
   rename(region = `Region, subregion, country or area *`, period = Period) %>% 
   select(-Index, -Variant, -Notes, -`Country code`, -`Parent code`, -`Type`) %>% 
   mutate(year = as.numeric(str_extract(period, ".+?(?=-)"))) %>% # match everything before hyphen or plus
@@ -37,9 +37,9 @@ all_fert <- bind_rows(
 
 wpp_life_table_file <- here("data/wpp/WPP2019_MORT_F17_3_ABRIDGED_LIFE_TABLE_FEMALE.xlsx")
 all_surv <- bind_rows(
-    read_excel(wpp_life_table_file, skip = 16, sheet = 1),
-    read_excel(wpp_life_table_file, skip = 16, sheet = 2)
-  ) %>%
+  read_excel(wpp_life_table_file, skip = 16, sheet = 1),
+  read_excel(wpp_life_table_file, skip = 16, sheet = 2)
+) %>%
   transmute(
     region = `Region, subregion, country or area *`,
     age = `Age (x)`,
@@ -174,7 +174,7 @@ data_list <- list(
   ages_before_fert = ages_before_fert,
   ages_after_fert = ages_after_fert,
   # population observation
-  t_obs = as.array(15),
+  t_obs = as.array(0),
   n_obs = n_obs,
   pop_mig_obs = pop_mig_obs,
   pop_native_obs = pop_native_obs,
@@ -216,5 +216,4 @@ to_save <- list(
   mappings = list(year = year_mapping, age = age_mapping)
 )
 
-write_rds(to_save, here("output/intermediate/shona_disaggregated_model.rds"))
-
+write_rds(to_save, here("output/intermediate/shona_disaggregated_model_ND.rds"))

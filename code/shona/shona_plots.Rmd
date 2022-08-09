@@ -162,7 +162,7 @@ ggsave(here("output/shona/shona_migration_detailed.pdf"))
 ```{r}
 total_pop <- extract_from_summary(
   model_stuff$table,
-  "total_pop",
+  "total_pop\\[",
   mappings = model_stuff$mappings["year"]
 ) %>% mutate(population = "all")
 
@@ -186,3 +186,30 @@ bind_rows(total_pop, total_native_pop, total_mig_pop) %>%
 
 ggsave(here("output/shona/shona_pop_totals.pdf"))
 ```
+
+## Population table
+
+```{r}
+total_pop_all <- extract_from_summary(
+  model_stuff$table, 
+  "total_pop",
+  mappings = model_stuff$mappings["year"]
+) |>
+  mutate(survey = "included")
+
+total_pop_all_ND <- 
+  read_rds(here("output/intermediate/shona_disaggregated_model_ND.rds")) %>%
+  getElement("table") %>%
+  extract_from_summary(
+    "total_pop",
+    mappings = model_stuff$mappings["year"]
+  ) %>%
+  mutate(survey = "not included")
+
+bind_rows(total_pop_all, total_pop_all_ND) |>
+  select(survey, year, mean, q5, median = q50, q95) |>
+  arrange(survey, year) |> 
+  write_csv(here("output/shona/shona_total_pop_table.csv"))
+  
+```
+

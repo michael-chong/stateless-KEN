@@ -1,5 +1,3 @@
-// Projection model 11
-// disaggregated migration 
 
 data {
   int<lower=1> K; // number of age groups
@@ -35,14 +33,11 @@ transformed data {
   array[Time] row_vector[K] logit_surv_mean = logit(surv_mean);
   array[Time] row_vector[n_fert_ages] log_fert_mean = log(fert_mean);
   
-  //  real<lower=1>pop_obs_total[n_obs];
-  //  vector<lower=0>[K] pop_obs_prop[n_obs];
-  
   for (t in 1 : Time) {
     log_init_mig_pop_ratios_data[t] = log(init_mig_pop_props_data[t]
                                           / init_mig_pop_props_data[t, 10]);
   }
-  //  print(log_init_mig_pop_ratios_data);
+
 }
 parameters {
   // total population and proportions
@@ -127,8 +122,11 @@ transformed parameters {
   
   // initialize migration populations
   pop_mig_init_total = exp(log_pop_mig_init_total);
-  
-  //  print(pop_mig_init_props);
+  // set the most recent migration wave to 0 
+  for (t in (t_obs[n_obs]+1):Time) {
+    pop_mig_init_total[t] = 0;
+  }
+
   pop_mig_true = rep_array(rep_vector(0, K), Time, Time);
   
   for (mig_year in 1 : Time) {
@@ -140,25 +138,22 @@ transformed parameters {
                                        * pop_mig_init_props[mig_year];
   }
   
-  //pop_mig_true[Time, Time] = pop_mig_obs[]
-  
   mig_births = rep_array(0, Time, Time);
   
   // aging and deaths for migrant population
   for (mig_year in 1 : (Time - 1)) {
     for (t in (mig_year + 1) : Time) {
-      pop_mig_true[mig_year, t] = leslie_mat_nb[t]
+      pop_mig_true[mig_year, t] = leslie_mat_nb[t-1]
                                   * pop_mig_true[mig_year, t - 1];
-      mig_births[t, mig_year] = dot_product(reprod[t],
+      mig_births[t, mig_year] = dot_product(reprod[t-1],
                                             pop_mig_true[mig_year, t - 1]);
-      //print(mig_births);
     }
   }
   
   pop_native_true[1] = rep_vector(0, K);
   
   for (t in 2 : Time) {
-    pop_native_true[t] = leslie_mat[t] * pop_native_true[t - 1]
+    pop_native_true[t] = leslie_mat[t-1] * pop_native_true[t - 1]
                          + append_row(sum(mig_births[t]),
                                       rep_vector(0, K - 1));
   }
@@ -187,7 +182,7 @@ model {
   }
   
   // initial population
-  log_pop_mig_init_total ~ normal(5, 1);
+  log_pop_mig_init_total ~ normal(4, 1);
   log_pop_mig_init_ratios ~ std_normal();
   
   //sigma_pop ~ normal(0, 100);
@@ -211,6 +206,7 @@ generated quantities {
     total_pop[t] = total_native_pop[t] + total_mig_pop[t];
     
   }
+  
 }
 
 
