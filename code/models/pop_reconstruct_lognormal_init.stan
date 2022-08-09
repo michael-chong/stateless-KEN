@@ -53,7 +53,6 @@ transformed parameters {
   real log_pop_0_total_true;
   real<lower=0> pop_0_total_true;
   
-  // for gamma reparameterization of dirichlet
   vector[K] pop_0_props;
   
   // transforms of (survival rates)
@@ -110,7 +109,7 @@ transformed parameters {
   }  
   
   for (t in 2:Time) {
-    pop_true[t] = leslie_mat[t] * pop_true[t-1];
+    pop_true[t] = leslie_mat[t-1] * pop_true[t-1];
   }  
 }
 
@@ -134,7 +133,6 @@ model {
     logit_surv_raw[t] ~ std_normal();
   }
   
-  //sigma_ratios ~ normal(0, 1);
   sigma_pop ~ normal(0, 10);
   sigma_fert ~ normal(0, 10);
   sigma_surv ~ normal(0, 10);
